@@ -1,0 +1,73 @@
+# Paths are relative to the directory containing configs/.
+schema_version: 1
+# Keep original exports, canonical records, indexes, and experiment outputs separate.
+paths:
+  raw: data/raw
+  processed: data/processed
+  index: artifacts/index
+  runs: runs
+# Acquisition downloads raw data. Run preparation/indexing afterward to use updates.
+acquisition:
+  # Each configured disease AND extra query gets its own bounded PMID sample.
+  pubmed_per_disease: 100
+  # Batch XML requests instead of making one request for every paper.
+  pubmed_batch_size: 100
+  # These control downloaded coverage; the optional evaluation cutoff is separate.
+  pubmed_start_year: 1990
+  pubmed_end_year: 2026
+  pubmed_sort: relevance
+  # Restrict disease searches toward therapy/repurposing literature.
+  pubmed_extra_query: '("drug therapy"[Subheading] OR repurpos*[Title/Abstract])'
+  # Named anchor-case searches supplement the per-disease corpus.
+  pubmed_queries:
+    anchor-abacavir: 'abacavir[Title/Abstract] AND (Alzheimer*[Title/Abstract] OR neuro*[Title/Abstract] OR HIV[Title/Abstract])'
+# These settings control paper retrieval, entity aggregation, and candidate filtering.
+retrieval:
+  # Final entity k is a search argument; this is the earlier paper-candidate pool.
+  candidate_documents: 200
+  # Other options: sum and top-mean. Max can tie entities sharing their best paper.
+  aggregation: max
+  # The full matched-paper count is retained even when only three excerpts are shown.
+  evidence_per_entity: 3
+  dense_model: NeuML/pubmedbert-base-embeddings
+  cross_encoder_model: cross-encoder/ms-marco-MiniLM-L6-v2
+  # CPU works without a GPU. Use mps/cuda only with a compatible local environment.
+  device: cpu
+  batch_size: 16
+  # Unknown approval evidence is excluded, so name/salt joins affect eligibility.
+  approved_only: true
+  # A heuristic score addition/subtraction, not a calibrated efficacy probability.
+  bbb_weight: 0.15
+  seed: 650
+# Labels remain separate from the literature and never become searchable evidence.
+evaluation:
+  # Temporal mode additionally needs reviewed dated outcomes and prior indications.
+  mode: indication-recovery
+  # null uses all prepared papers; a year also restricts historical drug availability.
+  cutoff_year: null
+  ks: [5, 10, 20]
+  # Query-level resampling for intervals; zero returns point estimates only.
+  bootstrap_samples: 1000
+# Starter scope, not a finalized study population. IDs are local stable IDs;
+# source MeSH/UMLS IDs remain in the normalized entities/documents.
+diseases:
+  - {id: 'disease:alzheimer', kind: disease, name: Alzheimer Disease, aliases: ["Alzheimer's disease", Alzheimer's, Alzheimer disease], cns: true}
+  - {id: 'disease:parkinson', kind: disease, name: Parkinson Disease, aliases: ["Parkinson's disease", Parkinson's, Parkinson disease], cns: true}
+  - {id: 'disease:als', kind: disease, name: Amyotrophic Lateral Sclerosis, aliases: [ALS, Lou Gehrig disease], cns: true}
+  - {id: 'disease:multiple-sclerosis', kind: disease, name: Multiple Sclerosis, cns: true}
+  - {id: 'disease:epilepsy', kind: disease, name: Epilepsy, aliases: [epileptic disorder], cns: true}
+  - {id: 'disease:huntington', kind: disease, name: Huntington Disease, aliases: ["Huntington's disease", Huntington's], cns: true}
+  - {id: 'disease:stroke', kind: disease, name: Stroke, aliases: [cerebrovascular accident], cns: true}
+  - {id: 'disease:migraine', kind: disease, name: Migraine Disorders, aliases: [migraine], cns: true}
+  - {id: 'disease:glioblastoma', kind: disease, name: Glioblastoma, aliases: [glioblastoma multiforme], cns: true}
+  - {id: 'disease:meningitis', kind: disease, name: Meningitis, cns: true}
+  - {id: 'disease:hiv', kind: disease, name: HIV Infections, aliases: [HIV infection, HIV, human immunodeficiency virus infection]}
+  - {id: 'disease:hepatitis-b', kind: disease, name: Hepatitis B, aliases: [chronic hepatitis B, hepatitis B infection]}
+  - {id: 'disease:hepatitis-c', kind: disease, name: Hepatitis C, aliases: [chronic hepatitis C, hepatitis C infection]}
+  - {id: 'disease:influenza', kind: disease, name: 'Influenza, Human', aliases: [influenza, flu]}
+  - {id: 'disease:tuberculosis', kind: disease, name: Tuberculosis, aliases: [pulmonary tuberculosis]}
+  - {id: 'disease:malaria', kind: disease, name: Malaria}
+  - {id: 'disease:covid19', kind: disease, name: COVID-19, aliases: [COVID19, coronavirus disease 2019, SARS-CoV-2 infection]}
+  - {id: 'disease:dengue', kind: disease, name: Dengue, aliases: [dengue fever]}
+  - {id: 'disease:herpes', kind: disease, name: Herpes Simplex, aliases: [herpes simplex infection]}
+  - {id: 'disease:pneumonia', kind: disease, name: Pneumonia}

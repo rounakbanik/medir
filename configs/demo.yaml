@@ -1,0 +1,15 @@
+# Entirely synthetic offline smoke test; never mix these files with scientific evaluation.
+paths:
+  # Keep fictional inputs and all derived artifacts isolated from the real study.
+  raw: examples/demo
+  processed: data/demo
+  index: artifacts/demo
+  runs: runs/demo
+evaluation:
+  # Small cutoffs/resampling counts keep this introductory example quick.
+  ks: [1, 5, 10]
+  bootstrap_samples: 100
+diseases:
+  # These fictional labels are for learning/testing, not scientific evaluation.
+  - {id: 'disease:brain', kind: disease, name: Brain disease, cns: true}
+  - {id: 'disease:infection', kind: disease, name: Viral infection}

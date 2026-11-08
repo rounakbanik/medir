@@ -1,0 +1,3 @@
+{"drug_id":"drug:alpha","disease_id":"disease:brain","relevance":1,"source":"synthetic"}
+{"drug_id":"drug:beta","disease_id":"disease:brain","relevance":0,"source":"synthetic"}
+{"drug_id":"drug:alpha","disease_id":"disease:infection","relevance":1,"source":"synthetic"}
