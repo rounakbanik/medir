@@ -48,10 +48,39 @@ IDs are generated from normalized ingredient names unless a preexisting exact al
 Product RxNorm IDs are not assigned to ingredients because they are different entity levels.
 External identifier lookup is supported as `mesh:D...`, `umls:C...`, `drugbank:DB...`, etc.
 
+## Identifier mappings from the proposal
+
+RxNorm, DrugBank, MeSH, and MONDO mappings use the existing local entity schema. Save them in
+`data/raw/local/crosswalk.entities.jsonl`, with the same canonical `id`, `kind`, and `name` as
+the entity being enriched. `identifiers` is an object of namespace-to-string-list mappings:
+
+| Namespace key | Value format | Query format |
+|---|---|---|
+| `rxnorm` | RxCUI as a string | `rxnorm:<RXCUI>` |
+| `drugbank` | `DB...` identifier | `drugbank:DB...` |
+| `mesh` | `D...` descriptor UI | `mesh:D...` |
+| `mondo` | Numeric local ID as a string, retaining leading zeros | `mondo:<local-ID>` |
+
+For MONDO, remove the `MONDO:` prefix from stored values; the registry adds the namespace when
+constructing query aliases. Use reviewed mappings at the same entity level. An ingredient,
+salt, combination product, and strength-specific product are not interchangeable identifiers.
+Mappings on two different canonical IDs do not merge them; ambiguous matches remain unresolved.
+The loaders do not parse raw RxNorm/MONDO releases or full DrugBank exports. Convert reviewed
+records to this schema before import. Target/mechanism fields are not part of `Entity` yet.
+
+## Native public-dataset inputs
+
 The openFDA v1 adapter takes only single-ingredient products with an original AP submission.
 Combination products are counted and skipped. Original application dates describe ingredient
 availability, not the approval date of a particular indication. Absence from openFDA means unknown
 approval, not evidence of rejection. A historical approval is not a current marketing/safety claim.
+
+Use Drugs@FDA `.json` or `.json.zip`, with application number, products/active ingredients,
+and submissions. The loader does not consume other openFDA endpoints or populate structured
+targets/mechanisms. B3DB inputs must be the classification `.tsv`/`.tsv.gz` with `compound_name`
+and `BBB+/BBB-` (`BBB+`/`BBB-`); `CID` is optional. RepoDB uses the archived CSV/TSV schema
+described below. Native exports may contain additional source columns; the strict extra-field
+rule applies to normalized/local JSONL records.
 
 ## Judgments: data/raw/local/judgments.jsonl
 

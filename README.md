@@ -206,6 +206,11 @@ Add source files under `data/raw/`, then rebuild. All commands below run from th
 with the virtual environment activated. These paths use `configs/default.yaml`; another config
 may set a different `paths.raw`.
 
+For the sources in [the project proposal](<Project Proposal.pdf>), start with
+[Importing the proposal datasets](#importing-the-proposal-datasets). PubMed, openFDA, B3DB,
+and repoDB exports have dedicated loaders. The steps below cover manually collected papers,
+reviewed labels, and entity/identifier mappings that supplement those datasets.
+
 ### 1. Choose the right folder and filename
 
 For papers collected manually, use `data/raw/local/`. Create the folder if needed:
@@ -368,21 +373,102 @@ update the original. Do not edit `data/processed/` or `artifacts/index/` directl
 watched in the background. Raw data is git-ignored, so share collected files separately when
 another teammate needs the same corpus.
 
-### Importing dataset exports
+### Importing the proposal datasets
 
-For the supported public datasets, keep the original export structure:
+The proposal's Data section names PubMed, DrugBank **or** openFDA, B3DB, repoDB, and identifiers
+from RxNorm/DrugBank and MeSH/MONDO. We use the openFDA alternative for v1 because we do not
+currently have DrugBank access.
 
-| Folder | Accepted files | Expected schema |
+| Proposal component | Input used now | What it supplies |
 |---|---|---|
-| `data/raw/pubmed/` | `.xml`, `.xml.gz`, `.jsonl`, `.jsonl.gz` | PubMed efetch XML, or the document JSONL schema above. |
-| `data/raw/openfda/` | `.json`, `.json.zip` | **Drugs@FDA application exports**, with products/active ingredients and submissions; other openFDA endpoints use different schemas. |
-| `data/raw/b3db/` | `.tsv`, `.tsv.gz` | B3DB classification columns `compound_name` and `BBB+/BBB-` (`BBB+` or `BBB-`); optional `CID`. |
-| `data/raw/repodb/` | `.csv`, `.tsv` | Columns `drug_name`, `drug_id`, `ind_name`, `status`; optional `ind_id`. Statuses: Approved, Terminated, Suspended, Withdrawn. |
+| Literature | PubMed abstracts and MeSH metadata | Searchable papers and drug/disease mentions. |
+| Drug information | openFDA **Drugs@FDA** | Ingredient/brand names and original approval evidence. |
+| BBB labels | B3DB **classification** table | Positive/negative BBB labels for matched drugs. |
+| Repurposing cases | Archived repoDB CSV | Drug vocabulary, indication outcomes, and evaluation labels. |
+| Entity IDs | DrugBank IDs from repoDB, MeSH IDs from PubMed, plus reviewed local mappings | Consistent IDs and query lookup; RxNorm and MONDO mappings use the same local entity schema. |
 
-New PubMed XML exports can go straight into `data/raw/pubmed/`; the adapter extracts abstracts
-and metadata. Records without abstracts and retracted records are skipped. For another data
-source, convert it to the local schemas above or add a source adapter in `ingestion.py`.
-The full contracts are in [data-contracts.md](docs/data-contracts.md).
+To download the four public datasets through the existing adapters:
+
+```bash
+drugir fetch --source pubmed
+drugir fetch --source openfda
+drugir fetch --source b3db
+drugir fetch --source repodb
+drugir run --dense
+```
+
+`drugir fetch` without `--source` fetches all four. PubMed selection uses the diseases, MeSH
+queries, date range, and sample limits in the config. For files collected separately, copy
+them to the folders below, preserving their original fields, then run `drugir prepare` and
+`drugir index --dense`.
+
+| Source and folder | Accepted files | Expected export |
+|---|---|---|
+| PubMed: `data/raw/pubmed/` | `.xml`, `.xml.gz`, `.jsonl`, `.jsonl.gz` | PubMed **efetch XML**, or the document JSONL schema above. A PMID list, search-history file, or ESearch JSON is not an abstract export. |
+| openFDA: `data/raw/openfda/` | `.json`, `.json.zip` | **Drugs@FDA application** records. Plain JSON can be a `results` envelope or an application list; ZIP JSON members need a `results` envelope. |
+| B3DB: `data/raw/b3db/` | `.tsv`, `.tsv.gz` | Classification table with `compound_name` and `BBB+/BBB-` columns. Labels must be `BBB+` or `BBB-`; optional `CID` is retained as a PubChem ID for matched drugs. |
+| repoDB: `data/raw/repodb/` | `.csv`, `.tsv` | Original archive columns `drug_name`, `drug_id`, `ind_name`, `status`; optional `ind_id`. Additional archive columns are accepted. |
+
+PubMed records without abstracts and retracted records are skipped. MeSH and chemical names/IDs
+are extracted from the XML. Manually added exports can use a new filename; leave downloader
+manifests and `active-files.json` alone, since they track the downloaded selection.
+
+Drugs@FDA records need `application_number`, `products[].active_ingredients[].name`, and
+`submissions`. Approval comes from an `ORIG` submission with status `AP`; dates use
+`submission_status_date` in `YYYYMMDD` form. Only single-ingredient products are imported.
+Other openFDA datasets, such as adverse events, NDC listings, or drug labels, need their own
+adapters. **The current Drugs@FDA loader does not supply structured targets or mechanisms.**
+Mechanism queries currently search the PubMed text.
+
+B3DB joins against known drug names and aliases. It does not add every B3DB compound to the
+approved-drug catalogue. Use the classification export; a regression-only file with `logBB`
+but no `BBB+/BBB-` column cannot supply the labels this reranker expects.
+
+repoDB uses the DrugBank ID in `drug_id` and the indication ID in `ind_id` when present.
+Indication names must match a known disease name/alias. `Approved` becomes a positive benchmark
+label; `Terminated`, `Suspended`, and `Withdrawn` become negatives. Unknown outcomes remain
+unjudged. These labels do not establish independent drug approval or a dated repurposing event;
+the proposal's time-split test still needs the reviewed facts described under [Time splits](#time-splits).
+
+### RxNorm, DrugBank, MeSH, and MONDO identifiers
+
+Add reviewed mappings in `data/raw/local/crosswalk.entities.jsonl`, reusing the existing
+canonical `id` for each entity. The following are templates; replace the names/IDs and every
+`REPLACE_...` value with a verified mapping before importing:
+
+```jsonl
+{"id":"drug:example-drug","kind":"drug","name":"Example Drug","identifiers":{"rxnorm":["REPLACE_WITH_RXCUI"],"drugbank":["REPLACE_WITH_DRUGBANK_ID"]},"sources":["REPLACE_WITH_MAPPING_SOURCE"]}
+{"id":"disease:example-disease","kind":"disease","name":"Example Disease","identifiers":{"mesh":["REPLACE_WITH_MESH_UI"],"mondo":["REPLACE_WITH_MONDO_LOCAL_ID"]},"sources":["REPLACE_WITH_MAPPING_SOURCE"]}
+```
+
+Each namespace maps to a **list of strings**, even for numeric IDs. Use lowercase namespace
+keys `rxnorm`, `drugbank`, `mesh`, and `mondo`. Store an RxCUI as its numeric string, a DrugBank ID
+as `DB...`, a MeSH UI as `D...`, and a MONDO ID's numeric part with its leading zeros. For example,
+an ID of the form `MONDO:1234567` is stored as `"mondo":["1234567"]` and queried as
+`mondo:1234567`. The number here illustrates the format, not an asserted disease mapping.
+
+External IDs are available as queries after rebuilding. These two work with the current corpus:
+
+```bash
+drugir search "drugbank:DB01048" --direction drug-to-disease --method bm25
+drugir search "mesh:D000544" --direction disease-to-drug --method bm25
+```
+
+The same lookup works for a supplied `rxnorm:<RXCUI>` or `mondo:<number>` mapping. Mappings
+enrich an entity with the same canonical ID; they do not merge two different canonical IDs.
+Use ingredient-level drug mappings for ingredient records. Product/strength-specific RxNorm IDs
+should not be copied onto an ingredient just because a product contains it.
+
+**Raw DrugBank XML/ZIP, RxNorm release files, and MONDO ontology files are not drop-in inputs.**
+Export their reviewed names/aliases/identifier mappings to the entity JSONL schema above.
+There is no automatic download or full parser for these alternative releases yet. DrugBank
+approval facts need a source that supports the FDA approval claim; a DrugBank ID alone does
+not set `approved: true`. Structured DrugBank targets/mechanisms need a separate adapter and
+schema extension; the current entity schema rejects those extra fields.
+
+The knowledge-graph sources named under Future Scope in the proposal (Hetionet and Open Targets)
+are future extensions. Their graph exports also need adapters before they can be used.
+The complete current record schemas are in [data-contracts.md](docs/data-contracts.md).
 
 ## Configuration
 

@@ -4,6 +4,22 @@ The first acquisition on November 8, 2026 uses the following sources. Per-file m
 `data/raw/` record download URLs, checksums, timestamps, and public query parameters. Models and
 source data retain their own licenses; this repository does not relicense them.
 
+## Relation to the proposal
+
+The Data section of [Project Proposal.pdf](<../Project Proposal.pdf>) specifies PubMed,
+DrugBank or openFDA, B3DB, repoDB, and RxNorm/DrugBank plus MeSH/MONDO identifiers. The current
+implementation uses the proposal's openFDA alternative. Its native loaders accept PubMed efetch
+XML, Drugs@FDA JSON/ZIP, B3DB classification TSV, and the original archived repoDB CSV/TSV.
+
+DrugBank/MeSH identifiers are retained from repoDB/PubMed. Additional reviewed RxNorm, DrugBank,
+MeSH, or MONDO mappings can be supplied as local entity JSONL. Raw DrugBank, RxNorm, and MONDO
+releases have no direct parser yet. Drugs@FDA supplies approval evidence rather than DrugBank's
+structured targets/mechanisms. The proposed Hetionet/Open Targets graph extensions are future work.
+See the [README import instructions](../README.md#importing-the-proposal-datasets) for the
+accepted files, folders, fields, and conversion requirements.
+
+## Sources used in the initial run
+
 | Source | Initial selection | Primary reference |
 |---|---|---|
 | PubMed | 100 ranked results per configured disease, 1990–2026; abstracts only, drug-therapy/repurposing query; extra abacavir query | [E-utilities reference](https://www.ncbi.nlm.nih.gov/books/NBK25499/) |
