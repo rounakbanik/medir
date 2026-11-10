@@ -6,7 +6,7 @@ source data retain their own licenses; this repository does not relicense them.
 
 | Source | Initial selection | Primary reference |
 |---|---|---|
-| PubMed | 100 ranked results per configured disease, 1990–2026; abstracts only, drug-therapy/repurposing query; extra abacavir query | [E-utilities reference](https://www.ncbi.nlm.nih.gov/books/NBK25499/) |
+| PubMed | Initial November 8 baseline: up to 100 ranked results per configured disease, 1990–2026; abstracts only, drug-therapy/repurposing query; extra abacavir query. The expanded acquisition targets up to 500 per disease/query with the same filters. | [E-utilities reference](https://www.ncbi.nlm.nih.gov/books/NBK25499/) |
 | openFDA | Full Drugs@FDA bulk export, November 6, 2026, 29,446 application records | [Drugs@FDA](https://open.fda.gov/apis/drug/drugsfda/), [bulk download metadata](https://api.fda.gov/download.json) |
 | B3DB | Classification TSV pinned to commit `75dab1cc607bb7a03f3de5c576cffd223e767844` | [Author repository](https://github.com/theochem/B3DB), [dataset paper](https://pubmed.ncbi.nlm.nih.gov/34716354/) |
 | repoDB | Original archived final database, Figshare article 3811674, CSV file 7341422 | [Author repository](https://github.com/adam-sam-brown/repoDB), [paper](https://doi.org/10.1038/sdata.2017.29), [archive](https://api.figshare.com/v2/articles/3811674) |
@@ -22,6 +22,12 @@ PubMed abstracts can be copyrighted by their publishers. Keep downloaded corpora
 their applicable terms allow redistribution, and follow the [NCBI disclaimer](https://www.ncbi.nlm.nih.gov/About/disclaimer.html).
 The downloader limits requests to below three per second and supports an optional NCBI API key
 and contact email, following the [E-utilities usage guidance](https://eutilities.github.io/site/API_Key/usageandkey/).
+
+The 100-per-disease baseline remains the reference snapshot reported in
+[`v1-validation.md`](v1-validation.md). The 500-per-disease setting is a larger acquisition
+target, not a claim that every query returns 500 abstracts. Keep the per-file acquisition
+manifests and ingestion report with each local snapshot so the selected and deduplicated counts
+can be compared. Raw abstracts and derived corpora remain local and are not committed.
 
 The FDA adapter uses original approved application submissions, not mere NDC listing, as its
 approval signal. It deliberately skips combination products. Missing catalogue matches and BBB
