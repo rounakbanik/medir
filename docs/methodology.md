@@ -1,5 +1,11 @@
 # Evaluation interpretation
 
+MAP and nDCG now use the implementations copied from `reference/starter-code/relevance.py`.
+The formulas, docstrings, and comments in that module are unchanged. The adapter pads short
+nDCG input lists with zeros. MAP keeps its original denominator: the number of positive gains
+in the supplied ranking, capped at k. It does not divide by all positive judgments, so a high
+MAP can coexist with low recall. Per-query `map@k` values are averaged for the run summary.
+
 ## What v1 measures
 
 The default benchmark measures retrieval of **known drug indications** from a sampled literature

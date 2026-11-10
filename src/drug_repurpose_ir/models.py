@@ -178,7 +178,19 @@ class SearchRequest(Record):
 
     query: str = Field(min_length=1, max_length=2000)
     direction: Literal["disease-to-drug", "drug-to-disease", "mechanism"] = "disease-to-drug"
-    method: Literal["random", "bm25", "dense", "hybrid", "cross-encoder", "abc"] = "bm25"
+    method: Literal[
+        "random",
+        "bm25",
+        "dense",
+        "hybrid",
+        "cross-encoder",
+        "abc",
+        "tf-idf",
+        "dirichlet",
+        "pivoted",
+        "word-count",
+        "custom",
+    ] = "bm25"
     # The paper pool is configured elsewhere; k limits the final entity list.
     k: int = Field(default=10, ge=1, le=100)
     feasibility: bool = False

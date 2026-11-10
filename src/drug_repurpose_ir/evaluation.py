@@ -17,10 +17,11 @@ import numpy as np
 from .engine import SearchEngine
 from .io import atomic_text, digest, read_jsonl, write_json, write_jsonl
 from .models import Judgment
+from .reference_adapter import LEXICAL_METHODS, reference_metrics
 
 
 def ranking_metrics(ranked: list[str], judgments: dict[str, int], ks: list[int]):
-    """Calculate binary Recall, reciprocal rank, nDCG, and coverage at each k.
+    """Calculate binary Recall, MAP, reciprocal rank, nDCG, and coverage at each k.
 
     Args:
         ranked: Entity IDs in retrieved order; duplicates are removed stably.
@@ -28,9 +29,11 @@ def ranking_metrics(ranked: list[str], judgments: dict[str, int], ks: list[int])
         ks: Positive rank cutoffs, validated by the configuration loader.
 
     Returns:
-        A flat mapping with recall@k, mrr@k, ndcg@k, unjudged@k, and returned@k.
+        A mapping with recall@k, map@k, mrr@k, ndcg@k, unjudged@k, and returned@k.
 
     Recall divides by all positive judgments, including positives never returned.
+    MAP/nDCG call the reference functions unchanged. MAP's denominator uses the
+    positives in the supplied result list, capped at k; it is not recall's denominator.
     nDCG uses binary gains and log2(rank+1) discounting. Unjudged entities score
     zero relevance but are counted separately among returned results. Empty
     result lists produce zero metrics, while queries with no positives are invalid.
@@ -44,17 +47,17 @@ def ranking_metrics(ranked: list[str], judgments: dict[str, int], ks: list[int])
     if not positive:
         raise ValueError("Recall/MRR/nDCG require at least one relevant judgment")
     metrics = {}
+    ranked_relevances = [int(eid in positive) for eid in ranked]
+    ideal_relevances = sorted(judgments.values(), reverse=True)
     for k in ks:
         top = ranked[:k]
         # Binary gains count known positives; judged negatives and unknowns both contribute zero.
         hits = [int(eid in positive) for eid in top]
-        # Zero-based i corresponds to one-based rank i+1, hence log2(i+2).
-        dcg = sum(hit / np.log2(i + 2) for i, hit in enumerate(hits))
-        # The ideal list uses every judged positive up to k, even if never retrieved.
-        ideal = sum(1 / np.log2(i + 2) for i in range(min(k, len(positive))))
+        map_value, ndcg_value = reference_metrics(ranked_relevances, ideal_relevances, k)
         metrics[f"recall@{k}"] = sum(hits) / len(positive)
         metrics[f"mrr@{k}"] = next((1 / (i + 1) for i, hit in enumerate(hits) if hit), 0.0)
-        metrics[f"ndcg@{k}"] = float(dcg / ideal)
+        metrics[f"map@{k}"] = map_value
+        metrics[f"ndcg@{k}"] = ndcg_value
         metrics[f"unjudged@{k}"] = (
             sum(eid not in judgments for eid in top) / len(top) if top else 0.0
         )
@@ -160,7 +163,7 @@ def evaluate(settings, methods=None, directions=None, output: Path | None = None
         raise ValueError(f"Evaluation output already exists: {output}; choose a new directory")
     # Validate method names before an expensive model-backed benchmark starts.
     methods = methods or ["random", "bm25", "bm25+feasibility", "abc"]
-    allowed = {"random", "bm25", "dense", "hybrid", "cross-encoder", "abc"}
+    allowed = {"random", "dense", "hybrid", "cross-encoder", "abc"} | LEXICAL_METHODS
     for variant in methods:
         if variant.removesuffix("+feasibility") not in allowed:
             raise ValueError(f"Unknown evaluation method: {variant}")
@@ -334,6 +337,11 @@ def evaluate(settings, methods=None, directions=None, output: Path | None = None
             "judgments_sha256": digest(settings.paths.processed / "judgments.jsonl"),
             "model_revisions": engine.model_revisions,
             "packages": package_versions(),
+            "ir_backend": "reference/starter-code (packaged in drug_repurpose_ir.ir)",
+            "map_definition": (
+                "Unchanged reference map_score; denominator is "
+                "min(positives in the supplied ranking, k)."
+            ),
             "limitations": [
                 "Unjudged pairs score zero; unjudged@k measures their share of returned results.",
                 "Indication recovery is not evidence of novel repurposing or clinical efficacy.",
@@ -356,14 +364,14 @@ def evaluate(settings, methods=None, directions=None, output: Path | None = None
         f"Mode: {settings.evaluation.mode}",
         f"Queries: {len(query_manifest)}; all metrics are macro averages over queries.",
         "",
-        "| Method | Recall@10 | MRR@10 | nDCG@10 |",
-        "|---|---:|---:|---:|",
+        "| Method | Recall@10 | MAP@10 | MRR@10 | nDCG@10 |",
+        "|---|---:|---:|---:|---:|",
     ]
     for variant in methods:
         data = summary[variant]["both"]
         cells = [
             f"{data[key]['mean']:.4f}" if key in data else "—"
-            for key in ["recall@10", "mrr@10", "ndcg@10"]
+            for key in ["recall@10", "map@10", "mrr@10", "ndcg@10"]
         ]
         lines.append("| " + " | ".join([variant, *cells]) + " |")
     lines += [
@@ -384,7 +392,14 @@ def package_versions():
     evaluation. This records versions; it does not install or modify packages.
     """
     result = {}
-    for package in ["drug-repurpose-ir", "numpy", "rank-bm25", "sentence-transformers", "torch"]:
+    for package in [
+        "drug-repurpose-ir",
+        "numpy",
+        "nltk",
+        "pandas",
+        "sentence-transformers",
+        "torch",
+    ]:
         try:
             result[package] = version(package)
         except PackageNotFoundError:

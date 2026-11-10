@@ -68,8 +68,17 @@ class Retrieval(Record):
     # Choose how several papers contribute to one candidate entity.
     aggregation: Literal["max", "sum", "top-mean"] = "max"
     aggregation_top_n: int = Field(default=3, ge=1)
-    bm25_k1: float = Field(default=1.5, gt=0)
+    # These defaults match the supplied BM25 implementation.
+    bm25_k1: float = Field(default=1.2, gt=0)
     bm25_b: float = Field(default=0.75, ge=0, le=1)
+    bm25_k3: float = Field(default=8, ge=0)
+    index_type: Literal["basic", "positional"] = "basic"
+    token_regex: str = r"\w+"
+    stopwords: list[str] = Field(default_factory=list)
+    minimum_word_frequency: int = Field(default=0, ge=0)
+    dirichlet_mu: float = Field(default=2000, gt=0)
+    pivoted_b: float = Field(default=0.2, ge=0, le=1)
+    custom_alpha: float = Field(default=0.5, ge=0)
     # Larger RRF offsets reduce the influence of very high first-stage ranks.
     rrf_k: int = Field(default=60, ge=1)
     dense_model: str = "NeuML/pubmedbert-base-embeddings"

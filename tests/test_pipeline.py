@@ -112,8 +112,14 @@ def test_rrf_and_dense_alignment_without_network(corpus, monkeypatch):
             """Ignore natural-language inputs and return the vector used by this test matrix."""
             return np.array([1, 0], dtype=np.float32)
 
+        def to(self, device):
+            """Accept device selection without allocating a real model."""
+            return self
+
     # Replace the model loader only, leaving production retrieval and row alignment intact.
-    monkeypatch.setattr("drug_repurpose_ir.engine.encoder", lambda _, **kw: FakeEncoder())
+    monkeypatch.setattr(
+        "drug_repurpose_ir.ir.vector_ranker.SentenceTransformer", lambda *a, **kw: FakeEncoder()
+    )
     response = engine.search("Brain disease", method="dense")
     assert response.results[0].entity.id == "drug:alpha"
     assert engine.search("Brain disease", method="hybrid").results

@@ -78,6 +78,9 @@ disease names/aliases are matched; subtypes are not automatically promoted to a 
 - `ingestion-report.json`: input checksums, mapping/coverage counts, duplicate counts, limitations.
 - Index `manifest.json`: corpus/entity fingerprints, date cutoff, excluded-document count.
 - `dense.json`, `embeddings.npy`: model settings/revision and aligned normalized embedding rows.
+- Index `corpus.jsonl`: the reference Indexer's input, with integer `docid`, `title`, and `text`.
+- Index `lexical/index.json`: the supplied basic/positional index's unchanged save format.
+  Integer IDs map to the same rows in index `documents.jsonl`, which retains PubMed/local IDs.
 - Run `queries.jsonl`: fixed positive/negative judgments and candidate/corpus coverage per query.
 - Run `rankings.jsonl`: method variant, ranked entities, scores, and supporting evidence.
 

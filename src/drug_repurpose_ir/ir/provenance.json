@@ -1,0 +1,51 @@
+{
+  "source_directory": "reference/starter-code",
+  "changes": "Package-relative imports only. All other bytes, including comments, docstrings, formulas, and line endings, are preserved.",
+  "files": {
+    "document_preprocessor.py": {
+      "source_sha256": "71196c9204dc420bc0602ebb56f402b50ff89e6d70c418001a1619cbdb3685d6",
+      "packaged_sha256": "71196c9204dc420bc0602ebb56f402b50ff89e6d70c418001a1619cbdb3685d6",
+      "import_changes": {}
+    },
+    "indexing.py": {
+      "source_sha256": "ca71a7bd565b266b59a70c01fc47729d45e72abdebe118d71c64501e5db7e849",
+      "packaged_sha256": "c6215479b680ef967bca47af0040a6b5e14708f470c14c1a21560065353b79e9",
+      "import_changes": {
+        "from document_preprocessor import Tokenizer": "from .document_preprocessor import Tokenizer"
+      }
+    },
+    "ranker.py": {
+      "source_sha256": "fde3e81f0e6aca89fe5540625bd68dfe2f284039d6115ba147a6b7d796333000",
+      "packaged_sha256": "5abc4a8d4f1d09482e388f201654753868593e55fb9c7f115099081a8429b4ca",
+      "import_changes": {
+        "from indexing import InvertedIndex": "from .indexing import InvertedIndex"
+      }
+    },
+    "relevance.py": {
+      "source_sha256": "edd437c54fa77da20a45faf85e4fb1415fcbec812d4e69d3101387b258ab0e7f",
+      "packaged_sha256": "edd437c54fa77da20a45faf85e4fb1415fcbec812d4e69d3101387b258ab0e7f",
+      "import_changes": {}
+    },
+    "vector_ranker.py": {
+      "source_sha256": "c468967e19a2f4631cd9e4a74ffa66685cc272a53beba807e8edea34a7486bf8",
+      "packaged_sha256": "755e70c8ad8e987af8b340b12755472225d51d47798ae058fff8885b90209ce2",
+      "import_changes": {
+        "from ranker import Ranker": "from .ranker import Ranker"
+      }
+    },
+    "l2r.py": {
+      "source_sha256": "0ad1cdb2d7bc6e8538b9ec31fa6fe6e890db30265f8180c7405e16891f7017d1",
+      "packaged_sha256": "eb5767a453e80ce5e0778deda50f3a896972bf39cf596b3dfac5d4536311aa89",
+      "import_changes": {
+        "from indexing import InvertedIndex": "from .indexing import InvertedIndex",
+        "from document_preprocessor import Tokenizer": "from .document_preprocessor import Tokenizer",
+        "from ranker import *": "from .ranker import *"
+      }
+    },
+    "network_features.py": {
+      "source_sha256": "bdc1d190c3680ba3c3d305a6448b406f610048427681d4510407e1e12647988c",
+      "packaged_sha256": "bdc1d190c3680ba3c3d305a6448b406f610048427681d4510407e1e12647988c",
+      "import_changes": {}
+    }
+  }
+}

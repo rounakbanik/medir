@@ -23,6 +23,11 @@ acquisition:
     anchor-abacavir: 'abacavir[Title/Abstract] AND (Alzheimer*[Title/Abstract] OR neuro*[Title/Abstract] OR HIV[Title/Abstract])'
 # These settings control paper retrieval, entity aggregation, and candidate filtering.
 retrieval:
+  # These select/configure the implementations copied from the reference folder.
+  index_type: basic
+  bm25_k1: 1.2
+  bm25_b: 0.75
+  bm25_k3: 8
   # Final entity k is a search argument; this is the earlier paper-candidate pool.
   candidate_documents: 200
   # Other options: sum and top-mean. Max can tie entities sharing their best paper.

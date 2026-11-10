@@ -1,7 +1,7 @@
 """Create reusable literature snapshots and optional dense embedding matrices.
 
-The lexical snapshot stores documents, entities, and token lists as JSONL;
-SearchEngine reconstructs the rank-bm25 object when loaded. Dense embeddings
+The lexical snapshot stores adapted JSONL and the supplied inverted index's
+JSON save format. SearchEngine loads that index and its Ranker. Dense embeddings
 are float32 NumPy rows in exactly the snapshot document order. Manifests
 record source/settings fingerprints so incompatible artifacts are rejected.
 """
@@ -9,7 +9,6 @@ record source/settings fingerprints so incompatible artifacts are rejected.
 import hashlib
 import json
 import os
-import re
 from datetime import date
 from pathlib import Path
 
@@ -18,15 +17,16 @@ import numpy as np
 from .config import Settings
 from .io import digest, read_jsonl, write_json, write_jsonl
 from .models import Document, Entity
+from .reference_adapter import (
+    build_reference_index,
+    implementation_signature,
+    reference_tokenizer,
+)
 
 
-def tokenize(text: str) -> list[str]:
-    """Lowercase text and extract lexical tokens while retaining internal hyphens/apostrophes.
-
-    This BM25 tokenizer is separate from entity-name normalization and neural
-    tokenization. Neural models receive raw title/abstract strings instead.
-    """
-    return re.findall(r"\b\w+(?:[-']\w+)*\b", text.lower())
+def tokenize(text: str, settings=None) -> list[str]:
+    """Use the supplied RegexTokenizer; neural models still receive raw text."""
+    return reference_tokenizer(settings).tokenize(text)
 
 
 def signature(value) -> str:
@@ -35,7 +35,21 @@ def signature(value) -> str:
     Sorting dictionary keys makes equivalent mappings independent of insertion
     order. This function hashes metadata; io.digest hashes file bytes.
     """
-    return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
+
+    # YAML may turn an explicitly written 8 into 8.0 for a float field. Treat those
+    # equivalent settings identically instead of invalidating an unchanged index.
+    def canonical(item):
+        if isinstance(item, dict):
+            return {key: canonical(val) for key, val in item.items()}
+        if isinstance(item, (list, tuple)):
+            return [canonical(val) for val in item]
+        if isinstance(item, float) and item.is_integer():
+            return int(item)
+        return item
+
+    return hashlib.sha256(
+        json.dumps(canonical(value), sort_keys=True, default=str).encode()
+    ).hexdigest()
 
 
 def input_signature(settings: Settings):
@@ -47,12 +61,19 @@ def input_signature(settings: Settings):
     """
     # Hash the prepared contracts rather than every raw source on each search startup.
     return {
-        "schema_version": 1,
+        "schema_version": 2,
+        "backend": "reference-ir",
+        "implementation": implementation_signature(),
         "documents": digest(settings.paths.processed / "documents.jsonl"),
         "entities": digest(settings.paths.processed / "entities.jsonl"),
         "cutoff_year": settings.evaluation.cutoff_year,
         "bm25_k1": settings.retrieval.bm25_k1,
         "bm25_b": settings.retrieval.bm25_b,
+        "bm25_k3": settings.retrieval.bm25_k3,
+        "index_type": settings.retrieval.index_type,
+        "token_regex": settings.retrieval.token_regex,
+        "stopwords": settings.retrieval.stopwords,
+        "minimum_word_frequency": settings.retrieval.minimum_word_frequency,
     }
 
 
@@ -79,17 +100,17 @@ def encoder(settings: Settings, revision_override=None):
         A SentenceTransformer ready to encode raw title/abstract strings.
 
     Raises:
-        RuntimeError: Optional neural dependencies have not been installed.
+        RuntimeError: The Sentence Transformers installation is missing.
 
     First use may download model weights. Device compatibility and model-specific
     maximum sequence limits remain the caller's configuration responsibility.
     """
-    # Keep neural imports lazy so base/BM25 installations do not need PyTorch.
+    # Load model weights only when document embeddings are requested.
     neural_environment(settings)
     try:
         from sentence_transformers import SentenceTransformer
     except ImportError as error:
-        raise RuntimeError("Install neural models with: pip install -e '.[neural]'") from error
+        raise RuntimeError("Install project dependencies with: pip install -e .") from error
     r = settings.retrieval
     model = SentenceTransformer(
         r.dense_model, revision=r.dense_revision or revision_override, device=r.device
@@ -156,6 +177,8 @@ def build_index(settings: Settings, dense=False):
     Unknown publication dates are excluded when a cutoff is active. Dense row
     order must stay aligned with documents.jsonl; do not reorder one separately.
     """
+    # The reference tokenizer imports Transformers at module load, so set its cache first.
+    neural_environment(settings)
     target = settings.paths.index
     target.mkdir(parents=True, exist_ok=True)
     inputs = input_signature(settings)
@@ -183,9 +206,9 @@ def build_index(settings: Settings, dense=False):
         # This order is the canonical embedding-row order; never sort a matrix independently.
         write_jsonl(target / "documents.jsonl", docs)
         write_jsonl(target / "entities.jsonl", entities)
-        write_jsonl(
-            target / "tokens.jsonl", (tokenize(d.text + " " + " ".join(d.mesh)) for d in docs)
-        )
+        # The adapter supplies the same docid/text JSONL expected by the Wikipedia code.
+        # Index creation, postings, metadata, and persistence are the reference implementation.
+        lexical = build_reference_index(settings, docs)
         write_json(
             manifest_path,
             {
@@ -193,6 +216,10 @@ def build_index(settings: Settings, dense=False):
                 "inputs": inputs,
                 "documents": len(docs),
                 "excluded_by_date": original_count - len(docs),
+                "backend": "reference-ir",
+                "lexical_statistics": {
+                    key: value for key, value in lexical.get_statistics().items() if key != "vocab"
+                },
             },
         )
     # Dense mode is optional; lexical snapshots are sufficient for BM25/ABC/random methods.
@@ -203,7 +230,7 @@ def build_index(settings: Settings, dense=False):
         if cached.get("signature") != expected or not (target / "embeddings.npy").exists():
             docs = [Document.model_validate(r) for r in read_jsonl(target / "documents.jsonl")]
             model = encoder(settings)
-            # Normalize rows so query/document dot products are cosine similarities.
+            # Document rows are normalized; the supplied VectorRanker handles query scoring.
             embeddings = model.encode(
                 [d.text for d in docs],
                 batch_size=settings.retrieval.batch_size,

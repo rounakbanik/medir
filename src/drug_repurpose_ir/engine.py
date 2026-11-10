@@ -13,14 +13,12 @@ import re
 from collections import Counter, defaultdict
 
 import numpy as np
-from rank_bm25 import BM25Okapi
 
 from .config import Settings
 from .entities import Registry, normalize
 from .indexing import (
     cached_model_revision,
     dense_signature,
-    encoder,
     input_signature,
     neural_environment,
     signature,
@@ -28,6 +26,14 @@ from .indexing import (
 )
 from .io import read_jsonl
 from .models import Document, Entity, Evidence, SearchRequest, SearchResponse, SearchResult
+from .reference_adapter import (
+    LEXICAL_METHODS,
+    lexical_query,
+    load_reference_index,
+    reference_cross_encoder,
+    reference_ranker,
+    reference_vector_ranker,
+)
 
 
 def rrf(rankings: list[list[int]], constant: int = 60) -> dict[int, float]:
@@ -40,7 +46,7 @@ def rrf(rankings: list[list[int]], constant: int = 60) -> dict[int, float]:
     Returns:
         Document row index to summed fusion score. Ranks are one-based.
 
-    Fusion uses ordering rather than raw BM25/cosine values, whose numerical
+    Fusion uses ordering rather than raw BM25/dot-product values, whose numerical
     scales differ. Sorting the returned mapping is the caller's responsibility.
     """
     # A document can receive contributions from both lexical and dense rank lists.
@@ -70,8 +76,8 @@ class SearchEngine:
     """Load one immutable index snapshot and reuse its search resources.
 
     The engine keeps BM25, catalogue/linking state, and paper/entity/MeSH maps in
-    memory. Neural models and the memory-mapped embedding matrix load lazily.
-    Query vectors and a bounded paper-ranking cache reduce repeated evaluation
+    memory. The supplied VectorRanker and the embedding matrix load lazily.
+    Cached dense scores and a bounded paper-ranking cache reduce repeated evaluation
     work. Create a new engine after changing data/settings; it is not a watcher.
     """
 
@@ -84,10 +90,12 @@ class SearchEngine:
         Raises:
             ValueError: Index files are missing or the data/settings fingerprint changed.
 
-        Neural weights are intentionally not loaded here, so BM25 remains usable
-        without the optional neural installation or an initial model download.
+        Neural weights are not loaded here. The supplied modules import their
+        neural libraries, but BM25 does not instantiate or download a model.
         """
         self.settings = settings
+        # Set cache defaults before the reference modules import neural libraries.
+        neural_environment(settings)
         target = settings.paths.index
         if not (target / "manifest.json").exists():
             raise ValueError("Index missing. Run drugir prepare then drugir index.")
@@ -100,17 +108,19 @@ class SearchEngine:
         self.registry = Registry(
             Entity.model_validate(r) for r in read_jsonl(target / "entities.jsonl")
         )
-        tokens = list(read_jsonl(target / "tokens.jsonl"))
-        r = settings.retrieval
-        # Reconstruct the lexical scorer from saved tokens; no neural model is loaded here.
-        self.bm25 = BM25Okapi(tokens, k1=r.bm25_k1, b=r.bm25_b)
-        self._encoder = None
+        # Restore the supplied inverted index and use its Ranker/BM25 classes directly.
+        self.document_index = load_reference_index(settings)
+        if set(self.document_index.document_metadata) != set(range(len(self.documents))):
+            raise ValueError("Lexical docid/document alignment is invalid; rebuild index")
+        self.ranker = reference_ranker(self.document_index, settings)
+        self._lexical_rankers = {"bm25": self.ranker}
+        self._vector_ranker = None
         self._cross_encoder = None
         self._embeddings = None
         self._dense_revision = None
         self.model_revisions = {}
-        # Query-vector reuse matters when evaluating dense, hybrid, and BBB variants together.
-        self._query_vectors = {}
+        # Cache reference VectorRanker outputs across dense/hybrid/BBB variants.
+        self._dense_scores = {}
         self._retrieval_cache = {}
         # Reverse lookup maps support coverage reporting and the indirect MeSH-bridge baseline.
         self._entity_docs = defaultdict(set)
@@ -157,11 +167,11 @@ class SearchEngine:
         }
 
     def _dense(self, text):
-        """Compute cosine scores for a query against aligned document embeddings.
+        """Get scores from the supplied VectorRanker against aligned document embeddings.
 
         Lazily validate/load embeddings.npy and reload the model revision recorded
-        with those rows. Normalized document/query vectors make dot product equal
-        cosine similarity. Cache each encoded query string for reuse in this engine.
+        with those rows. VectorRanker.query retains its original dot product and
+        query encoding. Cache each score vector for reuse in this engine.
 
         Returns:
             One score per document row, in documents.jsonl order.
@@ -185,12 +195,18 @@ class SearchEngine:
             if self._embeddings.shape[0] != len(self.documents):
                 raise ValueError("Dense row/document alignment is invalid; rebuild index")
         # Use the document matrix's resolved snapshot to prevent model/version mismatch.
-        if self._encoder is None:
-            self._encoder = encoder(self.settings, revision_override=self._dense_revision)
-        if text not in self._query_vectors:
-            self._query_vectors[text] = self._encoder.encode(text, normalize_embeddings=True)
-        # Both vectors are normalized; matrix multiplication scores every document at once.
-        return self._embeddings @ self._query_vectors[text]
+        if self._vector_ranker is None:
+            self._vector_ranker = reference_vector_ranker(
+                self.settings, self._embeddings, self._dense_revision
+            )
+        if text not in self._dense_scores:
+            # query() performs the supplied encoding, dot product, and sorting.
+            ranking = self._vector_ranker.query(text)
+            scores = np.zeros(len(self.documents), dtype=float)
+            for docid, score in ranking:
+                scores[docid] = score
+            self._dense_scores[text] = scores
+        return self._dense_scores[text]
 
     def _top(self, scores, limit, positive_only=False):
         """Select deterministic top document rows from a score vector.
@@ -235,22 +251,28 @@ class SearchEngine:
 
         BM25 and dense produce method-specific rankings. Hybrid applies RRF to each
         first-stage list and retains candidate_documents papers. Cross-encoder uses
-        that hybrid pool and scores query/text pairs jointly. Its sigmoid-transformed
-        scores preserve ordering; they are not calibrated treatment probabilities.
+        that hybrid pool through the supplied CrossEncoderScorer.score method.
+        Its raw paper scores are retained as evidence, not treatment probabilities.
 
         Returns:
             Ordered (document_row_index, score) pairs. Query-entity co-mention checks
             happen later in search, after this paper-candidate pool is chosen.
         """
         r = self.settings.retrieval
-        # BM25 sees tokenized text, while dense and cross-encoder models see raw text.
-        lexical = np.asarray(self.bm25.get_scores(tokenize(text)))
-        if method == "bm25":
-            return [(i, float(lexical[i])) for i in self._top(lexical, r.candidate_documents, True)]
+        if method in LEXICAL_METHODS:
+            if method not in self._lexical_rankers:
+                self._lexical_rankers[method] = reference_ranker(
+                    self.document_index, self.settings, method
+                )
+            # Negative BM25 scores are valid in the reference formula; do not discard them.
+            return lexical_query(self._lexical_rankers[method], text, method)[
+                : r.candidate_documents
+            ]
+        lexical = self.retrieve(text, "bm25")
         dense = self._dense(text)
         if method == "dense":
             return [(i, float(dense[i])) for i in self._top(dense, r.candidate_documents)]
-        lexical_ids = self._top(lexical, r.candidate_documents, True)
+        lexical_ids = [docid for docid, _ in lexical]
         dense_ids = self._top(dense, r.candidate_documents)
         # Raw lexical and semantic scores are not directly added; their ranks are fused.
         combined = rrf([lexical_ids, dense_ids], r.rrf_k)
@@ -260,24 +282,11 @@ class SearchEngine:
         if method == "cross-encoder":
             if self._cross_encoder is None:
                 neural_environment(self.settings)
-                from sentence_transformers import CrossEncoder
-
-                self._cross_encoder = CrossEncoder(
-                    r.cross_encoder_model,
-                    device=r.device,
-                    revision=r.cross_encoder_revision,
-                    max_length=r.max_sequence_length,
-                )
+                self._cross_encoder = reference_cross_encoder(self.settings, self.documents)
                 self.model_revisions["cross_encoder"] = cached_model_revision(
                     r.cross_encoder_model, r.cross_encoder_revision
                 )
-            values = self._cross_encoder.predict(
-                [(text, self.documents[i].text) for i in candidates],
-                batch_size=r.batch_size,
-                show_progress_bar=False,
-            )
-            # A sigmoid gives a nonnegative evidence score while preserving the model's order.
-            values = 1 / (1 + np.exp(-np.clip(np.asarray(values), -60, 60)))
+            values = [self._cross_encoder.score(i, text) for i in candidates]
             return sorted(
                 zip(candidates, map(float, values), strict=True),
                 key=lambda pair: (-pair[1], pair[0]),
@@ -402,10 +411,18 @@ class SearchEngine:
         # Normalize each method's evidence scale before applying a common feasibility weight.
         # Step 4: put each method's entity scores on a within-query scale before BBB adjustments.
         high = max(scores.values(), default=0)
+        low = min(scores.values(), default=0)
         results = []
         for eid, raw_score in scores.items():
             candidate = self.registry.entities[eid]
-            base = raw_score / high if high > 0 else 0
+            # Preserve ordering when the supplied BM25/LM scores are all negative.
+            # Raw reference scores remain available on each supporting Evidence record.
+            if high > 0:
+                base = raw_score / high
+            elif high > low:
+                base = (raw_score - low) / (high - low)
+            else:
+                base = 1.0
             adjustment = 0.0
             # Step 5: identify the drug/disease roles consistently in either search direction.
             if feasibility:

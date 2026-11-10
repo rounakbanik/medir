@@ -1,5 +1,8 @@
 # V1 verification — November 8, 2026
 
+This is the earlier library-based baseline. The current reference-code integration and its
+November 9 results are in [reference-integration.md](reference-integration.md).
+
 The Python implementation was verified locally on Apple Silicon with Python 3.12. The assignment reference folder was left unchanged.
 
 ## Real data loaded
