@@ -6,7 +6,7 @@ source data retain their own licenses; this repository does not relicense them.
 
 | Source | Initial selection | Primary reference |
 |---|---|---|
-| PubMed | Initial November 8 baseline: up to 100 ranked results per configured disease, 1990–2026; abstracts only, drug-therapy/repurposing query; extra abacavir query. The expanded acquisition targets up to 500 per disease/query with the same filters. | [E-utilities reference](https://www.ncbi.nlm.nih.gov/books/NBK25499/) |
+| PubMed | November 8 baseline: 1,922 unique abstracts from up to 100 ranked results per configured disease plus the abacavir query. Expanded November 10 snapshot: 9,588 unique abstracts from 500-result query caps, using the same 1990–2026 filters. | [E-utilities reference](https://www.ncbi.nlm.nih.gov/books/NBK25499/) |
 | openFDA | Full Drugs@FDA bulk export, November 6, 2026, 29,446 application records | [Drugs@FDA](https://open.fda.gov/apis/drug/drugsfda/), [bulk download metadata](https://api.fda.gov/download.json) |
 | B3DB | Classification TSV pinned to commit `75dab1cc607bb7a03f3de5c576cffd223e767844` | [Author repository](https://github.com/theochem/B3DB), [dataset paper](https://pubmed.ncbi.nlm.nih.gov/34716354/) |
 | repoDB | Original archived final database, Figshare article 3811674, CSV file 7341422 | [Author repository](https://github.com/adam-sam-brown/repoDB), [paper](https://doi.org/10.1038/sdata.2017.29), [archive](https://api.figshare.com/v2/articles/3811674) |
@@ -24,10 +24,14 @@ The downloader limits requests to below three per second and supports an optiona
 and contact email, following the [E-utilities usage guidance](https://eutilities.github.io/site/API_Key/usageandkey/).
 
 The 100-per-disease baseline remains the reference snapshot reported in
-[`v1-validation.md`](v1-validation.md). The 500-per-disease setting is a larger acquisition
-target, not a claim that every query returns 500 abstracts. Keep the per-file acquisition
-manifests and ingestion report with each local snapshot so the selected and deduplicated counts
-can be compared. Raw abstracts and derived corpora remain local and are not committed.
+[`v1-validation.md`](v1-validation.md). The expanded acquisition selected up to 500 PMIDs per
+query: 10,500 query results were selected, 10,307 records were parsed, and 719 duplicate records
+were removed, leaving 9,588 unique abstracts. The committed
+[`PubMed snapshot manifest`](../data/manifests/pubmed-expanded-2026-11-10.json) preserves the
+queries, selected PMIDs, per-file checksums, and coverage counts without redistributing abstract
+text. Raw XML and normalized corpus files remain local and are not committed. Rebuild the local
+snapshot with `drugir fetch --source pubmed` followed by `drugir prepare`, then refresh the
+shareable identifier manifest with `python scripts/export_pubmed_manifest.py`.
 
 The FDA adapter uses original approved application submissions, not mere NDC listing, as its
 approval signal. It deliberately skips combination products. Missing catalogue matches and BBB

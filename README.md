@@ -55,8 +55,10 @@ lexical and dense indexes. The first neural run also downloads pretrained model 
 `doctor` prints the current dataset counts and index metadata.
 
 The default collection targets 500 PubMed results per disease plus an abacavir query, the full
-openFDA Drugs@FDA export, B3DB classification data, and the archived repoDB CSV. Raw data,
-models, and results are git-ignored, so a fresh clone needs its own downloads.
+openFDA Drugs@FDA export, B3DB classification data, and the archived repoDB CSV. The expanded
+November 10 PubMed snapshot contains 9,588 unique abstracts; its shareable query/PMID/checksum
+manifest is [here](data/manifests/pubmed-expanded-2026-11-10.json). Raw data, models, and results
+are git-ignored, so a fresh clone needs its own downloads.
 
 ## Using the system
 
