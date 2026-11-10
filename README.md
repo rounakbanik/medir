@@ -54,7 +54,7 @@ The first command downloads the configured datasets, prepares the records, and b
 lexical and dense indexes. The first neural run also downloads pretrained model weights.
 `doctor` prints the current dataset counts and index metadata.
 
-The default collection is 100 PubMed results per disease plus an abacavir query, the full
+The default collection targets 500 PubMed results per disease plus an abacavir query, the full
 openFDA Drugs@FDA export, B3DB classification data, and the archived repoDB CSV. Raw data,
 models, and results are git-ignored, so a fresh clone needs its own downloads.
 
@@ -402,7 +402,7 @@ The settings most likely to change are:
 | Setting | Default | Controls |
 |---|---|---|
 | `diseases` | 20 starter diseases | Scope, aliases, and CNS status. |
-| `acquisition.pubmed_per_disease` | `100` | PMID limit per disease or extra query. |
+| `acquisition.pubmed_per_disease` | `500` | PMID limit per disease or extra query. The initial November 8 baseline used 100. |
 | `acquisition.pubmed_start_year` / `pubmed_end_year` | `1990` / `2026` | Downloaded publication range. |
 | `acquisition.pubmed_queries` | Abacavir query | Additional literature searches. |
 | `retrieval.candidate_documents` | `200` | Retrieved paper pool; separate from final entity `--k`. |

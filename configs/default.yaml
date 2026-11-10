@@ -9,7 +9,8 @@ paths:
 # Acquisition downloads raw data. Run preparation/indexing afterward to use updates.
 acquisition:
   # Each configured disease AND extra query gets its own bounded PMID sample.
-  pubmed_per_disease: 100
+  # Expanded sample target; the November 8 baseline used 100 per disease.
+  pubmed_per_disease: 500
   # Batch XML requests instead of making one request for every paper.
   pubmed_batch_size: 100
   # These control downloaded coverage; the optional evaluation cutoff is separate.

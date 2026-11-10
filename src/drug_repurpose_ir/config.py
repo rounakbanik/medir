@@ -37,7 +37,9 @@ class Acquisition(Record):
     """
 
     # Cap each search job; extra anchor queries receive their own cap too.
-    pubmed_per_disease: int = Field(default=100, ge=1, le=9999)
+    # The default expands the initial 100-per-disease sample while manifests
+    # preserve the actual coverage selected by each acquisition.
+    pubmed_per_disease: int = Field(default=500, ge=1, le=9999)
     pubmed_batch_size: int = Field(default=100, ge=1, le=500)
     pubmed_extra_query: str = '("drug therapy"[Subheading] OR repurpos*[Title/Abstract])'
     pubmed_sort: Literal["relevance", "pub date"] = "relevance"
