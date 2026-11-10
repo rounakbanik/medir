@@ -15,7 +15,7 @@ DrugBank/MeSH identifiers are retained from repoDB/PubMed. Additional reviewed R
 MeSH, or MONDO mappings can be supplied as local entity JSONL. Raw DrugBank, RxNorm, and MONDO
 releases have no direct parser yet. Drugs@FDA supplies approval evidence rather than DrugBank's
 structured targets/mechanisms. The proposed Hetionet/Open Targets graph extensions are future work.
-See the [README import instructions](../README.md#importing-the-proposal-datasets) for the
+See the [dataset import instructions](adding-data.md#importing-the-proposal-datasets) for the
 accepted files, folders, fields, and conversion requirements.
 
 ## Sources used in the initial run

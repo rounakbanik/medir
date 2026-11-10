@@ -74,3 +74,31 @@ Missing dates, sparse repoDB disease coverage, and PubMed query sampling can lim
 
 The system retains evidence for inspection. It does not run docking, make efficacy claims, infer
 BBB labels, generate scientific citations, or synthesize clinical advice.
+
+## Running evaluation
+
+Build the index first, then run the methods you want to compare:
+
+```bash
+drugir evaluate --methods bm25,hybrid,hybrid+feasibility
+drugir evaluate --methods random,bm25,abc --max-queries 4
+drugir evaluate --methods bm25,hybrid --directions disease-to-drug --output runs/experiment-01
+```
+
+Hybrid needs dense embeddings. Search uses `--feasibility`; evaluation uses the
+`+feasibility` suffix. `--max-queries` selects a stable prefix for a quick check.
+Choose a new named output directory for each run; completed summaries are not overwritten.
+
+Each run writes the following under `runs/`:
+
+| File | Contents |
+|---|---|
+| `summary.json` | Metrics, intervals, exclusions, and model/data metadata. |
+| `per-query.csv` | Individual query scores and coverage counts. |
+| `queries.jsonl` | The query set and judgments used. |
+| `rankings.jsonl` | Ranked entities and supporting papers for every variant. |
+| `config.json` | Resolved settings for the run. |
+
+`runs/LATEST` is a text file pointing to the latest evaluation directory.
+
+Current results are in [reference-integration.md](reference-integration.md).
